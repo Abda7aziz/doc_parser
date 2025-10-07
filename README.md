@@ -1,6 +1,6 @@
 # Document Parser
 
-A Python utility for parsing and extracting content from various document formats (PDF, DOCX, TXT, MD, CSV) with support for OCR capabilities.
+Python utilities for parsing documents (PDF, DOCX, TXT, MD, CSV), normalizing text, and emitting chunked JSON suitable for RAG ingestion. Includes optional OCR.
 
 ## Features
 
@@ -11,10 +11,14 @@ A Python utility for parsing and extracting content from various document format
   - Markdown files (MD)
   - CSV files
 - Extracts structured content including:
-  - Text segments
-  - Tables (from DOCX)
-  - Document sections and headings
-  - Page numbers (for PDFs)
+  - Text segments and table blocks
+  - Document sections (DOCX headings)
+  - Page numbers (PDFs)
+  - Optional chunked output with configurable size and overlap
+- PDF niceties:
+  - Per-page OCR fallback (when `--ocr` is enabled)
+  - Simple header/footer de-duplication
+  - Newline normalization for cleaner paragraphs
 
 ## Requirements
 
@@ -42,45 +46,68 @@ pip install -r requirements.txt
 
 ### Command Line Interface
 
+Preview segments (default):
 ```sh
-python reader.py <file-path>
+python reader.py path/to/file.pdf
+```
+
+Emit chunks JSON (for RAG ingestion):
+```sh
+python reader.py --chunks --max-chars 1200 path/to/file.pdf
+```
+
+Enable OCR for scanned PDFs:
+```sh
+python reader.py --chunks --ocr path/to/scanned.pdf
 ```
 
 ### Python API
 
 ```python
-from reader import read_file
+from reader import read_file, read_chunks
+from parsers.common import segments_to_chunks
 
-# Basic usage
-segments = read_file("document.pdf")
+# 1) Get raw segments
+segments = read_file("document.pdf", ocr=False)
 
-# With OCR enabled (for PDFs)
-segments = read_file("document.pdf", ocr=True)
+# 2) Convert to chunks (code path)
+result = segments_to_chunks(segments, max_chars=1200, overlap=120)
+print(result["chunks"][0])
 
-# Process other formats
-segments = read_file("document.docx")
-segments = read_file("data.csv")
-
-# Each segment contains:
-for segment in segments:
-    print(segment.doc_id)    # Document identifier
-    print(segment.text)      # Extracted text
-    print(segment.page)      # Page number (PDF only)
-    print(segment.section)   # Document section (DOCX only)
-    print(segment.kind)      # Content type (text/table)
-    print(segment.meta)      # Additional metadata
+# 3) One-call convenience
+chunks_json = read_chunks("document.pdf", ocr=False, max_chars=1200)
 ```
 
 ## Output Format
 
-The parser returns a list of `Segment` objects with the following attributes:
+Segments (internal representation):
 
-- `doc_id`: Unique identifier for the document
+- `doc_id`: Document identifier (generated as `<uuid8>-<filename_stem>` unless you supply your own)
 - `text`: Extracted text content
 - `page`: Page number (PDF only)
 - `section`: Section heading path (DOCX only)
 - `kind`: Content type ("text" or "table")
-- `meta`: Additional metadata dictionary
+- `meta`: Additional metadata dictionary (e.g., `{"source": "file.pdf"}`)
+
+Chunks (for ingestion):
+
+```json
+{
+  "chunks": [
+    {
+      "id": "<doc_id>:0000",
+      "doc_id": "<doc_id>",
+      "text": "...chunk text...",
+      "metadata": { "page": 1, "kind": "text", "source": "file.pdf", "chunk_index": 0 }
+    }
+  ]
+}
+```
+
+## Notes
+
+- `reader.py` also supports `--chunks` and `--max-chars` via CLI. Overlap is configurable via code (see `segments_to_chunks`).
+- PDF extraction automatically removes repeated headers/footers and normalizes newlines. Enable `--ocr` for scanned pages.
 
 ## License
 
