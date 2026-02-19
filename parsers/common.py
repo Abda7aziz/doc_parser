@@ -9,7 +9,7 @@ class Segment:
     One Segment represents a contiguous piece of content pulled from a source
     document (e.g., a PDF page's text, a DOCX paragraph, or a table). Segments
     are later transformed into delivery-sized chunks for downstream use.
-
+vb
     Fields:
     - doc_id: Logical id for the document (stable across all chunks).
     - text: Raw extracted text (may be long; will be chunked later).
